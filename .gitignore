@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+checkpoints/
+results/*
+!results/.gitkeep
+data/DISFA/img/*
+!data/DISFA/img/.gitkeep
+data/DISFA/list/*
+!data/DISFA/list/.gitkeep
+*.pth
+venv/
+.DS_Store
