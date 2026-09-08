@@ -176,8 +176,8 @@ class image_train(object):
                                          std=[0.229, 0.224, 0.225])
         transform = transforms.Compose([
             transforms.Resize(self.img_size),
-            PlaceCrop(self.crop_size, offset_x, offset_y),
-            SetFlip(flip),
+            # PlaceCrop(self.crop_size, offset_x, offset_y),
+            # SetFlip(flip),
             transforms.CenterCrop(self.crop_size),
             transforms.ColorJitter(brightness=0.1,
                                    contrast=0.1,
