@@ -1,8 +1,5 @@
 # EGIR-v2: Energy-Guided Iterative Feature Refinement với Knowledge Query
 
-Cải tiến từ SymGraphAU cho bài toán Facial Action Unit Recognition — tri thức FACS
-tham gia trực tiếp vào suy luận (cả train lẫn inference) thay vì chỉ là regularizer.
-
 ## Cấu trúc thư mục
 
 ```
@@ -16,21 +13,21 @@ EGIR-v2/
 ├── matricMAE.py                # script sinh ma trận AU-Expression gốc
 ├── matrixMAE/
 │   └── M_AE_DISFA.npy          # ma trận M_AE tính sẵn (dùng cho pseudo-label ở cả 3 stage)
-├── graph_rules.py              # MỚI — luật đồ thị FACS đa quan hệ cho EGIR-v2 (Stage 2/3)
+├── graph_rules.py              # luật đồ thị FACS đa quan hệ cho EGIR-v2 (Stage 2/3)
 ├── model/
 │   ├── SymStage1.py            # TÁI SỬ DỤNG NGUYÊN — backbone + AU/Expr head
 │   ├── resnet.py / swin_transformer.py / basic_block.py   # TÁI SỬ DỤNG nguyên
-│   ├── kg_encoder.py           # MỚI — R-GCN + Stage2GraphModule (w_r, c_r, attention)
-│   └── egir_stage3.py          # MỚI — model Stage 3, vòng lặp T bước reasoning
+│   ├── kg_encoder.py           # R-GCN + Stage2GraphModule (w_r, c_r, attention)
+│   └── egir_stage3.py          # model Stage 3, vòng lặp T bước reasoning
 ├── tool/
 │   ├── DISFA_image_label_process.py       # sinh list file train/test từ ảnh + nhãn thô
 │   └── DISFA_calculate_AU_class_weights.py # sinh file trọng số AU
 ├── data/DISFA/
 │   ├── img/                    # đổ ảnh thô vào đây (theo cấu trúc SNxxx/frame.png)
 │   └── list/                   # tool script sẽ sinh list .txt vào đây
-├── train_EGIR_Stage1.py        # GẦN NHƯ NGUYÊN VĂN train_Sym_Stage_1.py gốc
-├── train_EGIR_Stage2.py        # MỚI — đóng băng Stage1, Class Center 1 lần, train R-GCN
-└── train_EGIR_Stage3.py        # MỚI — đóng băng Stage2, K cố định, fine-tune backbone qua T bước
+├── train_EGIR_Stage1.py        # gần như train_Sym_Stage_1.py gốc
+├── train_EGIR_Stage2.py        # đóng băng Stage1, Class Center 1 lần, train R-GCN
+└── train_EGIR_Stage3.py        # đóng băng Stage2, K cố định, fine-tune backbone qua T bước
 ```
 
 ## 1. Cài đặt môi trường
