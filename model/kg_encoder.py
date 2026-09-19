@@ -54,29 +54,37 @@ class KnowledgeGraphEncoder(nn.Module):
 
 
 class Stage2GraphModule(nn.Module):
-    """Gồm: R-GCN + trọng số w_r (theo loại quan hệ) + c_r (theo từng cạnh,
-       khởi tạo từ M_AE) + Cross-Attention query (W_Q). Được train ở Stage 2,
-       ĐÓNG BĂNG hoàn toàn khi sang Stage 3 (giống cách SymGraphAU đóng băng
-       GCN/logic embedder ở Phase 3)."""
+    W_FLOOR = 0.3
+    C_FLOOR = 0.2
+
     def __init__(self, mid_dim, emb_dim):
         super().__init__()
         self.emb_dim = emb_dim
         self.kg_encoder = KnowledgeGraphEncoder(G.N_NODE, len(G.REL_TYPES), emb_dim)
         self.W_Q = nn.Linear(mid_dim, emb_dim)
-        self.w_r = nn.Parameter(torch.ones(len(G.REL_TYPES)))
-        c_init_t = torch.tensor(G.C_INIT, dtype=torch.float32).clamp(1e-3, 1 - 1e-3)
-        self.c_r = nn.Parameter(torch.log(c_init_t / (1 - c_init_t)))
+        self.w_r = nn.Parameter(torch.zeros(len(G.REL_TYPES)))
+        c_init_t = torch.tensor(G.C_INIT, dtype=torch.float32)
+        c_target = ((c_init_t - self.C_FLOOR) / (1 - self.C_FLOOR)).clamp(1e-3, 1 - 1e-3)
+        self.c_r = nn.Parameter(torch.log(c_target / (1 - c_target)))
+
+    def get_w(self):
+        return self.W_FLOOR + F.softplus(self.w_r)
+
+    def get_c(self):
+        return self.C_FLOOR + (1 - self.C_FLOOR) * torch.sigmoid(self.c_r)
 
     def compute_energy(self, p_a, p_e, alpha):
         B = p_a.shape[0]
         E = torch.zeros(B, device=p_a.device)
+        w_all = self.get_w()
+        c_all = self.get_c()
         for e_id, edge in enumerate(G.ENERGY_EDGES):
             i, j, rel = edge['i'], edge['j'], edge['rel']
             a = G.get_node_value(i, p_a, p_e)
             b = G.get_node_value(j, p_a, p_e)
             viol = G.VIOL_FN[rel](a, b)
-            w = F.softplus(self.w_r[G.REL2ID[rel]])
-            c = torch.sigmoid(self.c_r[e_id])
+            w = w_all[G.REL2ID[rel]]
+            c = c_all[e_id]
             alpha_edge = 0.5 * (alpha[:, i] + alpha[:, j])
             E = E + alpha_edge * w * c * viol
         return E

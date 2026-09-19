@@ -1,7 +1,7 @@
 """
 train_EGIR_Stage2.py — Graph Construction of Knowledge Embedding (bản EGIR-v2).
 
-Khác với train_Sym_Stage_2.py gốc (CNF + PySAT + triplet loss), file này:
+Khác với train_Sym_Stage_2.py (CNF + PySAT + triplet loss), file này:
   - Đóng băng TOÀN BỘ Stage 1 (giống repo gốc).
   - Tính Class Center MỘT LẦN duy nhất (compute_class_centers, không lặp mỗi batch).
   - Train Stage2GraphModule (R-GCN + w_r + c_r + Cross-Attention) trên
@@ -50,7 +50,7 @@ def compute_class_centers(net_stage1, loader, num_aus, num_expr, emb_dim, M_AE, 
     sum_a = torch.zeros(num_aus, emb_dim); cnt_a = torch.zeros(num_aus)
     sum_e = torch.zeros(num_expr, emb_dim); cnt_e = torch.zeros(num_expr)
 
-    for inputs, targets in tqdm(loader, desc="Tính Class Center (1 lượt)"):
+    for inputs, targets in tqdm(loader, desc="Calculate Class Center (1 pass)"):
         targets = targets.float()
         if torch.cuda.is_available():
             inputs = inputs.cuda()
@@ -90,9 +90,9 @@ def main(conf):
 
     train_loader = get_dataloader(conf)
 
-    # ---- Load & đóng băng TOÀN BỘ Stage 1 (đúng tinh thần repo gốc) ----
+    # ---- Load & đóng băng TOÀN BỘ Stage 1 ----
     net_stage1 = MEFARGStage1(num_aus=conf.num_classes, backbone=conf.arc, num_expr=7)
-    assert conf.resume != '', "Cần --resume trỏ tới checkpoint Stage 1 (best_model_foldN.pth)"
+    assert conf.resume != '', "Need --resume to point to Stage 1 checkpoint (best_model_foldN.pth)"
     net_stage1 = load_state_dict(net_stage1, conf.resume)
     if torch.cuda.is_available():
         net_stage1 = net_stage1.cuda()
@@ -100,7 +100,7 @@ def main(conf):
     for p in net_stage1.parameters():
         p.requires_grad = False
     net_stage1.eval()
-    logging.info(f"[Stage1] Đã load & đóng băng: {conf.resume}")
+    logging.info(f"[Stage1] Loaded & frozen: {conf.resume}")
 
     # ---- Class Center: MỘT LẦN duy nhất ----
     centers_au, centers_expr = compute_class_centers(
@@ -114,6 +114,7 @@ def main(conf):
                              weight_decay=conf.weight_decay)
 
     c_init_t = torch.tensor(G.C_INIT, device=device)
+    REG_COEF = 1.0
 
     for epoch in range(conf.epochs):
         graph_module.train()
@@ -136,15 +137,30 @@ def main(conf):
             optimizer.zero_grad()
             E, _ = graph_module(feat, node_init_fixed, p_a, p_e)
             L_energy = E.mean()
-            w_all = F.softplus(graph_module.w_r)
-            c_all = torch.sigmoid(graph_module.c_r)
+            w_all = graph_module.get_w()         
+            c_all = graph_module.get_c()         
             L_reg = ((w_all - 1) ** 2).mean() + ((c_all - c_init_t) ** 2).mean()
-            loss = L_energy + 0.05 * L_reg
+            loss = L_energy + REG_COEF * L_reg    
             loss.backward()
             optimizer.step()
-            pbar.set_postfix({'L_energy': f"{L_energy.item():.4f}", 'L_reg': f"{L_reg.item():.4f}"})
+            pbar.set_postfix({'L_energy': f"{L_energy.item():.8f}", 'L_reg': f"{L_reg.item():.6f}",
+                               'w_mean': f"{w_all.mean().item():.3f}", 'c_mean': f"{c_all.mean().item():.3f}"})
 
-        infostr = f"Stage2 Fold{conf.fold} Epoch {epoch+1}: L_energy_last_batch={L_energy.item():.4f}"
+            if pbar.n == 0 or (pbar.n % 500 == 0):
+                with torch.no_grad():
+                    print(f"\n[DEBUG] p_a: mean={p_a.mean().item():.6f} max={p_a.max().item():.6f} "
+                          f"| p_e: mean={p_e.mean().item():.6f} max={p_e.max().item():.6f}")
+                    for rel in ['implies', 'excludes', 'co_occurs']:
+                        vs = []
+                        for edge in G.ENERGY_EDGES:
+                            if edge['rel'] != rel: continue
+                            a = G.get_node_value(edge['i'], p_a, p_e)
+                            b = G.get_node_value(edge['j'], p_a, p_e)
+                            vs.append(G.VIOL_FN[rel](a, b).mean().item())
+                        print(f"[DEBUG] average type violation '{rel}': {sum(vs)/len(vs):.8f} "
+                              f"(on {len(vs)} edge)")
+
+        infostr = f"Stage2 Fold{conf.fold} Epoch {epoch+1}: L_energy_last_batch={L_energy.item():.8f}"
         print(infostr); logging.info(infostr)
 
     ckpt_path = os.path.join(conf['outdir'], f"stage2_fold{conf.fold}.pth")
@@ -154,8 +170,8 @@ def main(conf):
         'centers_au': centers_au, 'centers_expr': centers_expr,
         'mid_dim': mid_dim, 'emb_dim': EMB_DIM,
     }, ckpt_path)
-    logging.info(f"[LƯU] {ckpt_path}")
-    print(f"[LƯU] {ckpt_path}")
+    logging.info(f"[Save] {ckpt_path}")
+    print(f"[Save] {ckpt_path}")
 
 
 if __name__ == "__main__":
