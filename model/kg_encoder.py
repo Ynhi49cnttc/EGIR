@@ -56,6 +56,7 @@ class KnowledgeGraphEncoder(nn.Module):
 class Stage2GraphModule(nn.Module):
     W_FLOOR = 0.3
     C_FLOOR = 0.2
+    ALPHA_FLOOR = 0.02 
 
     def __init__(self, mid_dim, emb_dim):
         super().__init__()
@@ -89,6 +90,11 @@ class Stage2GraphModule(nn.Module):
             E = E + alpha_edge * w * c * viol
         return E
 
+    def get_alpha(self, attn_logits):
+        n_node = attn_logits.shape[-1]
+        soft = torch.softmax(attn_logits, dim=-1)
+        return self.ALPHA_FLOOR + (1 - n_node * self.ALPHA_FLOOR) * soft
+
     def forward(self, feat, node_init, p_a, p_e):
         """feat: (B, D, mid_dim) — dùng để tính query attention.
            node_init: (N_node, emb_dim) — Class Center cố định (không batch)."""
@@ -96,6 +102,6 @@ class Stage2GraphModule(nn.Module):
         K = self.kg_encoder(node_init.unsqueeze(0).expand(B, -1, -1))
         q = self.W_Q(feat.mean(dim=1))
         attn_logits = torch.einsum('bd,bnd->bn', q, K) / math.sqrt(self.emb_dim)
-        alpha = torch.softmax(attn_logits, dim=-1)
+        alpha = self.get_alpha(attn_logits)
         E = self.compute_energy(p_a, p_e, alpha)
         return E, K

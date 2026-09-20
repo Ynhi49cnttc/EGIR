@@ -41,8 +41,7 @@ class EGIR_Stage3(nn.Module):
 
             q = self.graph_module.W_Q(F_t.mean(dim=1))
             attn_logits = torch.einsum('bd,nd->bn', q, K_fixed) / math.sqrt(self.emb_dim)
-            alpha = torch.softmax(attn_logits, dim=-1)
-
+            alpha = self.graph_module.get_alpha(attn_logits)
             E_t = self.graph_module.compute_energy(p_a_t, p_e_t, alpha)
             energies.append(E_t)
 
